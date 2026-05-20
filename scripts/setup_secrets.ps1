@@ -21,7 +21,7 @@ $secretsDir = Join-Path $secretsBase "_secrets"
 $configsDir = Join-Path $secretsBase "_config"
 
 Write-Host ""
-Write-Host "=== GardenIrrigationControl - Secret Setup ===" -ForegroundColor Cyan
+Write-Host "=== ESP8266 Template - Secret Setup ===" -ForegroundColor Cyan
 Write-Host "Repo root    : $repoRoot"
 Write-Host "Secrets dir  : $secretsDir"
 Write-Host "Configs dir  : $configsDir"
@@ -91,7 +91,7 @@ $platformIoOverrideLines = @(
     '; It is loaded from platformio.ini via:',
     ';   extra_configs = ../_secrets/platformio_override.ini',
     '',
-    '[env:az-delivery-devkit-v4-ota]',
+    '[env:d1-mini-ota]',
     '; TODO: Set your OTA upload password (must match OTA_PASSWORD in OtaSecret.h)',
     'upload_flags =',
     '  --auth=YOUR_OTA_PASSWORD'

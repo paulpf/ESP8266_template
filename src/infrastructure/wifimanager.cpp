@@ -1,30 +1,12 @@
 #include "wifimanager.h"
 #include "reconnectpolicy.h"
 
-// Initialize the static instance pointer
-WifiManager *WifiManager::_instance = nullptr;
-
 WifiManager::WifiManager()
 {
-  // WiFi event API requires a static callback function.
-  // We bridge that static callback to this instance via _instance.
-  // Therefore only one active WifiManager instance is supported.
-  if (_instance != nullptr)
-  {
-    Trace::log(TraceLevel::ERROR,
-               "WifiManager instance already exists; replacing instance");
-  }
-  _instance = this;
 }
 
 WifiManager::~WifiManager()
 {
-  // Defensive cleanup: if this object is destroyed, clear static forwarding
-  // target so callback invocations never dereference an invalid instance.
-  if (_instance == this)
-  {
-    _instance = nullptr;
-  }
 }
 
 void WifiManager::setup(String ssid, String password, String clientName)
@@ -38,10 +20,7 @@ void WifiManager::setup(String ssid, String password, String clientName)
   // Hostname helps identify this node in router UI and mDNS environments.
   WiFi.mode(WIFI_STA);
   WiFi.setHostname(clientName.c_str());
-  // Re-register handler idempotently to avoid duplicate callback registrations
-  // after repeated setup calls.
-  WiFi.removeEvent(staticWifiEventHandler);
-  WiFi.onEvent(staticWifiEventHandler);
+  randomSeed(micros());
 
   // Kick off first connect explicitly.
   // We do not rely on implicit connect behavior or event ordering side effects.
@@ -49,52 +28,10 @@ void WifiManager::setup(String ssid, String password, String clientName)
   _wifiConnectStartTime = millis();
   _wifiState = WIFI_CONNECTING;
   _nextReconnectAttemptTime = _wifiConnectStartTime;
+  _connectedEventPending = false;
+  _disconnectedEventPending = false;
 
   Trace::log(TraceLevel::DEBUG, "WiFi setup complete.");
-}
-
-// Static WiFi event handler
-void WifiManager::staticWifiEventHandler(WiFiEvent_t event)
-{
-  // Forward to the instance method if instance exists
-  if (_instance)
-  {
-    _instance->wifiEvent(event);
-  }
-}
-
-void WifiManager::wifiEvent(WiFiEvent_t event)
-{
-  // Keep event handler lightweight: only update state and schedule work.
-  // Actual reconnect actions happen in loop()/manageConnection().
-  switch (event)
-  {
-  case SYSTEM_EVENT_STA_START:
-    Trace::log(TraceLevel::INFO, "WiFi started");
-    break;
-  case SYSTEM_EVENT_STA_GOT_IP:
-  {
-    const IPAddress ip = WiFi.localIP();
-    Trace::logf(TraceLevel::INFO, "WiFi connected, IP: %u.%u.%u.%u", ip[0],
-                ip[1], ip[2], ip[3]);
-    _wifiState = WIFI_CONNECTED;
-    _connectedEventPending = true;
-    _disconnectedEventPending = false;
-    _reconnectAttempt = 0;
-    break;
-  }
-  case SYSTEM_EVENT_STA_DISCONNECTED:
-    Trace::log(TraceLevel::INFO,
-               "WiFi disconnected, attempting to reconnect...");
-    _wifiState = WIFI_DISCONNECTED;
-    _disconnectedEventPending = true;
-    _connectedEventPending = false;
-    // Schedule immediate reconnect attempt; subsequent attempts use backoff.
-    _nextReconnectAttemptTime = millis();
-    break;
-  default:
-    break;
-  }
 }
 
 bool WifiManager::consumeConnectedEvent()
@@ -113,21 +50,42 @@ bool WifiManager::consumeDisconnectedEvent()
 
 bool WifiManager::loop()
 {
-  // Safety net:
-  // If event delivery misses a disconnect, still detect link loss by polling
-  // WiFi.status() and transition to DISCONNECTED state.
-  if (_wifiState == WIFI_CONNECTED && WiFi.status() != WL_CONNECTED)
+  const bool isConnectedNow = (WiFi.status() == WL_CONNECTED);
+
+  // Track connection edges via polling to stay compatible across ESP32/ESP8266.
+  if (isConnectedNow && _wifiState != WIFI_CONNECTED)
   {
-    Trace::log(TraceLevel::WARNING,
-               "WiFi link lost (status poll), scheduling reconnect");
+    const IPAddress ip = WiFi.localIP();
+    Trace::logf(TraceLevel::INFO, "WiFi connected, IP: %u.%u.%u.%u", ip[0],
+                ip[1], ip[2], ip[3]);
+    _wifiState = WIFI_CONNECTED;
+    _connectedEventPending = true;
+    _disconnectedEventPending = false;
+    _reconnectAttempt = 0;
+  }
+  else if (!isConnectedNow && _wifiState == WIFI_CONNECTED)
+  {
+    Trace::log(TraceLevel::INFO,
+               "WiFi disconnected, attempting to reconnect...");
     _wifiState = WIFI_DISCONNECTED;
     _disconnectedEventPending = true;
     _connectedEventPending = false;
     _nextReconnectAttemptTime = millis();
   }
 
+  // Safety net:
+  // If initial connect stalls, move to DISCONNECTED so managed reconnect kicks in.
+  if (_wifiState == WIFI_CONNECTING && !isConnectedNow &&
+      (millis() - _wifiConnectStartTime) >= WIFI_CONNECTION_TIMEOUT)
+  {
+    Trace::log(TraceLevel::WARNING,
+               "WiFi connect timeout, scheduling reconnect");
+    _wifiState = WIFI_DISCONNECTED;
+    _nextReconnectAttemptTime = millis();
+  }
+
   // Fast-path: transition CONNECTING -> CONNECTED as soon as link is up.
-  if (_wifiState == WIFI_CONNECTING && WiFi.status() == WL_CONNECTED)
+  if (_wifiState == WIFI_CONNECTING && isConnectedNow)
   {
     Trace::logf(TraceLevel::DEBUG,
                 "WiFi connected after connection attempt %u",
@@ -158,7 +116,8 @@ void WifiManager::manageConnection()
     _reconnectAttempt++;
 
     // Random jitter prevents synchronized reconnect storms across many devices.
-    const uint32_t jitter = esp_random() % (WIFI_RECONNECT_JITTER_MS + 1);
+    const uint32_t jitter = static_cast<uint32_t>(
+      random(static_cast<long>(WIFI_RECONNECT_JITTER_MS) + 1L));
     // Exponential backoff keeps network pressure low during outages.
     const uint32_t reconnectDelayMs = ReconnectPolicy::computeDelayMs(
         _reconnectAttempt, WIFI_RECONNECT_BASE_DELAY_MS,

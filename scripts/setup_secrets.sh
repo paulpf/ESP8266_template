@@ -25,7 +25,7 @@ SECRETS_DIR="$SECRETS_BASE/_secrets"
 CONFIGS_DIR="$SECRETS_BASE/_config"
 
 echo ""
-echo "=== ESP32 Template - Secret Setup ==="
+echo "=== ESP8266 Template - Secret Setup ==="
 echo "Repo root    : $REPO_ROOT"
 echo "Secrets dir  : $SECRETS_DIR"
 echo "Configs dir  : $CONFIGS_DIR"
@@ -91,7 +91,7 @@ PLATFORMIO_OVERRIDE='; Local override file for secrets/sensitive config.
 ; It is loaded from platformio.ini via:
 ;   extra_configs = ../_secrets/platformio_override.ini
 
-[env:az-delivery-devkit-v4-ota]
+[env:d1-mini-ota]
 ; TODO: Set your OTA upload password (must match OTA_PASSWORD in OtaSecret.h)
 upload_flags =
   --auth=YOUR_OTA_PASSWORD'

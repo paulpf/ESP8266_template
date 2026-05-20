@@ -8,7 +8,7 @@ on:
 
 jobs:
   firmware-build:
-    name: Firmware Build (ESP32)
+    name: Firmware Build (ESP8266)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -26,7 +26,7 @@ jobs:
         run: bash scripts/setup_secrets.sh
 
       - name: Build USB environment
-        run: pio run -e az-delivery-devkit-v4-usb
+        run: pio run -e d1-mini-usb
 
   native-tests:
     name: Native Unit Tests

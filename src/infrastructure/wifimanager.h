@@ -20,16 +20,7 @@ public:
   bool consumeConnectedEvent() override;
   bool consumeDisconnectedEvent() override;
 
-  // Static WiFi event handler that will be used with WiFi.onEvent
-  static void staticWifiEventHandler(WiFiEvent_t event);
-
 private:
-  // Static pointer to the instance (similar to MqttManager's implementation)
-  static WifiManager *_instance;
-
-  // Instance method to handle WiFi events
-  void wifiEvent(WiFiEvent_t event);
-
   String _ssid;
   String _password;
   String _clientName;

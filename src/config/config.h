@@ -20,12 +20,16 @@ constexpr uint32_t SERIAL_STARTUP_DELAY_MS = 500;
 
 // OTA configuration
 #define ENABLE_OTA true
+#if defined(ARDUINO_ARCH_ESP8266)
+constexpr uint16_t OTA_PORT = 8266;
+#else
 constexpr uint16_t OTA_PORT = 3232;
+#endif
 // Security default: fail closed if no OTA password is configured
 #define OTA_ALLOW_INSECURE_NO_PASSWORD false
 
 // Device identity
-#define DEVICE_NAME "esp32-template"
+#define DEVICE_NAME "esp8266-template"
 
 // WiFi configuration
 constexpr int WIFI_CONNECTION_TIMEOUT = 10000; // milliseconds
